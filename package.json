@@ -1,20 +1,20 @@
 {
-  "name": "typeorm",
+  "name": "ionic-typeorm",
   "private": true,
   "version": "0.0.11",
-  "description": "Data-Mapper ORM for TypeScript, ES7, ES6, ES5. Supports MySQL, PostgreSQL, MariaDB, SQLite, MS SQL Server, Oracle, WebSQL databases.",
+  "description": "Fork of TypeORM modified to work with Ionic. Data-Mapper ORM for TypeScript, ES7, ES6, ES5. Supports MySQL, PostgreSQL, MariaDB, SQLite, MS SQL Server, Oracle, WebSQL and Cordova SQLite databases.",
   "license": "MIT",
   "readmeFilename": "README.md",
   "author": {
-    "name": "Umed Khudoiberdiev",
-    "email": "pleerock.me@gmail.com"
+    "name": "Rob Sinton",
+    "email": "rob@tepee.digital"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/typeorm/typeorm.git"
+    "url": "https://github.com/robsinton/ionic-typeorm.git"
   },
   "bugs": {
-    "url": "https://github.com/typeorm/typeorm/issues"
+    "url": "https://github.com/robsinton/ionic-typeorm/issues"
   },
   "tags": [
     "orm",
@@ -33,7 +33,11 @@
     "oracle",
     "oracle-orm",
     "websql",
-    "websql-orm"
+    "websql-orm",
+    "cordova",
+    "cordova-orm",
+    "cordova-sqlite",
+    "cordova-sqlite-orm"
   ],
   "devDependencies": {
     "@types/chai": "^3.4.30",
