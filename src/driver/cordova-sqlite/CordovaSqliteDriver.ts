@@ -14,9 +14,9 @@ import {CordovaSqliteQueryRunner} from "./CordovaSqliteQueryRunner";
 import {NamingStrategyInterface} from "../../naming-strategy/NamingStrategyInterface";
 
 /**
- * Declare a global function that is only available in browsers that support WebSQL.
+ * Declare a global function that is only available on devices with the Cordova Sqlite Plugin.
  */
-declare function openDatabase(...params: any[]): any;
+declare var window: any;
 
 /**
  * Organizes communication with the Cordova Sqlite plugin.
@@ -87,12 +87,10 @@ export class CordovaSqliteDriver implements Driver {
         }, this.options.extra || {});
 
         return new Promise<void>((ok, fail) => {
-            const connection = openDatabase(
-                options.database,
-                options.version,
-                options.description,
-                options.size,
-            );
+            const connection = (<any>window).sqlitePlugin.openDatabase({
+                name: options.database + '.db',
+                location: options.location || 'default',
+            });
             this.databaseConnection = {
                 id: 1,
                 connection: connection,
