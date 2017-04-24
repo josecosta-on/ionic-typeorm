@@ -10,12 +10,16 @@ import {ColumnMetadata} from "../../metadata/ColumnMetadata";
 import {TableSchema} from "../../schema-builder/schema/TableSchema";
 import {ForeignKeySchema} from "../../schema-builder/schema/ForeignKeySchema";
 import {IndexSchema} from "../../schema-builder/schema/IndexSchema";
+import {PrimaryKeySchema} from "../../schema-builder/schema/PrimaryKeySchema";
 import {QueryRunnerAlreadyReleasedError} from "../../query-runner/error/QueryRunnerAlreadyReleasedError";
 import {CordovaSqliteDriver} from "./CordovaSqliteDriver";
 import {ColumnType} from "../../metadata/types/ColumnTypes";
 
 /**
  * Runs queries on a single cordova sqlite database connection.
+ *
+ * Does not support compose primary keys with autoincrement field.
+ * todo: need to throw exception for this case.
  */
 export class CordovaSqliteQueryRunner implements QueryRunner {
 
@@ -45,7 +49,6 @@ export class CordovaSqliteQueryRunner implements QueryRunner {
     /**
      * Releases database connection. This is needed when using connection pooling.
      * If connection is not from a pool, it should not be released.
-     * You cannot use this class's methods after its released.
      */
     release(): Promise<void> {
         if (this.databaseConnection.releaseCallback) {
@@ -144,10 +147,10 @@ export class CordovaSqliteQueryRunner implements QueryRunner {
             // todo: check if transaction is not active
             db.transaction((tx: any) => {
                 tx.executeSql(query, parameters, (tx: any, result: any) => {
-                    const rows = Object
-                        .keys(result.rows)
-                        .filter(key => key !== "length")
-                        .map(key => result.rows[key]);
+                    let rows = [];
+                    for (let i = 0; i < result.rows.length; i++ ) {
+                        rows[i] = result.rows.item(i);
+                    }
                     ok(rows);
 
                 }, (tx: any, err: any) => {
@@ -288,7 +291,7 @@ export class CordovaSqliteQueryRunner implements QueryRunner {
             const tableSchema = new TableSchema(dbTable["name"]);
 
             // load columns and indices
-            /*const [dbColumns, dbIndices, dbForeignKeys]: ObjectLiteral[][] = await Promise.all([
+            const [dbColumns, dbIndices, dbForeignKeys]: ObjectLiteral[][] = await Promise.all([
                 this.query(`PRAGMA table_info("${dbTable["name"]}")`),
                 this.query(`PRAGMA index_list("${dbTable["name"]}")`),
                 this.query(`PRAGMA foreign_key_list("${dbTable["name"]}")`),
@@ -326,7 +329,7 @@ export class CordovaSqliteQueryRunner implements QueryRunner {
                 const columnForeignKeys = dbForeignKeys
                     .filter(foreignKey => foreignKey["from"] === dbColumn["name"])
                     .map(foreignKey => {
-                        const keyName = namingStrategy.foreignKeyName(dbTable["name"], [foreignKey["from"]], foreignKey["table"], [foreignKey["to"]]);
+                        const keyName = this.driver.namingStrategy.foreignKeyName(dbTable["name"], [foreignKey["from"]], foreignKey["table"], [foreignKey["to"]]);
                         return new ForeignKeySchema(keyName, [foreignKey["from"]], [foreignKey["to"]], foreignKey["table"], foreignKey["on_delete"]); // todo: how sqlite return from and to when they are arrays? (multiple column foreign keys)
                     });
                 tableSchema.addForeignKeys(columnForeignKeys);
@@ -347,7 +350,7 @@ export class CordovaSqliteQueryRunner implements QueryRunner {
             // create index schemas from the loaded indices
             const indicesPromises = dbIndices
                 .filter(dbIndex => {
-                    return  dbIndex["origin"] !== "pk" &&
+                    return dbIndex["origin"] !== "pk" &&
                         (!tableSchema.foreignKeys.find(foreignKey => foreignKey.name === dbIndex["name"])) &&
                         (!tableSchema.primaryKeys.find(primaryKey => primaryKey.name === dbIndex["name"]));
                 })
@@ -377,7 +380,7 @@ export class CordovaSqliteQueryRunner implements QueryRunner {
                 });
 
             const indices = await Promise.all(indicesPromises);
-            tableSchema.indices = indices.filter(index => !!index) as IndexSchema[];*/
+            tableSchema.indices = indices.filter(index => !!index) as IndexSchema[];
 
             return tableSchema;
         }));
@@ -387,7 +390,7 @@ export class CordovaSqliteQueryRunner implements QueryRunner {
      * Checks if table with the given name exist in the database.
      */
     async hasTable(tableName: string): Promise<boolean> {
-        const sql = `SELECT * FROM sqlite_master WHERE type = 'table' AND name = ${tableName}'`;
+        const sql = `SELECT * FROM sqlite_master WHERE type = 'table' AND name = '${tableName}'`;
         const result = await this.query(sql);
         return result.length ? true : false;
     }
@@ -737,7 +740,7 @@ export class CordovaSqliteQueryRunner implements QueryRunner {
     /**
      * Creates a database type from a given column metadata.
      */
-    normalizeType(typeOptions: { type: ColumnType, length?: string|number, precision?: number, scale?: number, timezone?: boolean, fixedLength?: boolean }): string {
+    normalizeType(typeOptions: { type: ColumnType, length?: string|number, precision?: number, scale?: number, timezone?: boolean }) {
         switch (typeOptions.type) {
             case "string":
                 return "character varying(" + (typeOptions.length ? typeOptions.length : 255) + ")";
@@ -847,7 +850,7 @@ export class CordovaSqliteQueryRunner implements QueryRunner {
             if (typeof column.default === "number") {
                 c += " DEFAULT " + column.default + "";
             } else if (typeof column.default === "boolean") {
-                c += " DEFAULT " + (column.default === true ? "TRUE" : "FALSE") + "";
+                c += " DEFAULT " + (column.default === true ? "1" : "0") + "";
             } else if (typeof column.default === "function") {
                 c += " DEFAULT " + column.default() + "";
             } else if (typeof column.default === "string") {
@@ -860,7 +863,7 @@ export class CordovaSqliteQueryRunner implements QueryRunner {
         return c;
     }
 
-    protected async recreateTable(tableSchema: TableSchema, oldTableSchema?: TableSchema): Promise<void> {
+    protected async recreateTable(tableSchema: TableSchema, oldTableSchema?: TableSchema, migrateData = true): Promise<void> {
         // const withoutForeignKeyColumns = columns.filter(column => column.foreignKeys.length === 0);
         // const createForeignKeys = options && options.createForeignKeys;
         const columnDefinitions = tableSchema.columns.map(dbColumn => this.buildCreateColumnSql(dbColumn)).join(", ");
@@ -890,8 +893,10 @@ export class CordovaSqliteQueryRunner implements QueryRunner {
         const oldColumnNames = oldTableSchema ? oldTableSchema.columns.map(column => `"${column.name}"`).join(", ") : columnNames;
 
         // migrate all data from the table into temporary table
-        const sql2 = `INSERT INTO "temporary_${tableSchema.name}"(${oldColumnNames}) SELECT ${oldColumnNames} FROM "${tableSchema.name}"`;
-        await this.query(sql2);
+        if (migrateData) {
+            const sql2 = `INSERT INTO "temporary_${tableSchema.name}"(${oldColumnNames}) SELECT ${oldColumnNames} FROM "${tableSchema.name}"`;
+            await this.query(sql2);
+        }
 
         // drop old table
         const sql3 = `DROP TABLE "${tableSchema.name}"`;

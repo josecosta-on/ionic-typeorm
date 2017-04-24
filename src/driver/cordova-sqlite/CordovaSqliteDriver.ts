@@ -87,16 +87,19 @@ export class CordovaSqliteDriver implements Driver {
         }, this.options.extra || {});
 
         return new Promise<void>((ok, fail) => {
-            const connection = (<any>window).sqlitePlugin.openDatabase({
+            (<any>window).sqlitePlugin.openDatabase({
                 name: options.database + '.db',
                 location: options.location || 'default',
+            }, (connection: any) => {
+                this.databaseConnection = {
+                    id: 1,
+                    connection: connection,
+                    isTransactionActive: false
+                };
+                ok();
+            }, (error: any) => {
+                fail(error);
             });
-            this.databaseConnection = {
-                id: 1,
-                connection: connection,
-                isTransactionActive: false
-            };
-            ok();
         });
     }
 
