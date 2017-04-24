@@ -15,6 +15,7 @@ import {OrmUtils} from "../util/OrmUtils";
 import {CannotDetermineConnectionOptionsError} from "./error/CannotDetermineConnectionOptionsError";
 import {PlatformTools} from "../platform/PlatformTools";
 import {WebsqlDriver} from "../driver/websql/WebsqlDriver";
+import {CordovaSqliteDriver} from "../driver/cordova-sqlite/CordovaSqliteDriver";
 
 /**
  * ConnectionManager is used to store and manage all these different connections.
@@ -443,6 +444,8 @@ export class ConnectionManager {
                 return new SqlServerDriver(options, logger);
             case "websql":
                 return new WebsqlDriver(options, logger);
+            case "cordova-sqlite":
+                return new CordovaSqliteDriver(options, logger);
             default:
                 throw new MissingDriverError(options.type);
         }

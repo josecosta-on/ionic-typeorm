@@ -1,7 +1,7 @@
 /**
  * Driver type.
  */
-export type DriverType = "mysql"|"postgres"|"mariadb"|"sqlite"|"oracle"|"mssql"|"websql";
+export type DriverType = "mysql"|"postgres"|"mariadb"|"sqlite"|"oracle"|"mssql"|"websql"|"cordova-sqlite";
 
 /**
  * Connectivity options used to connect to the database, and other database-driver-specific options.
